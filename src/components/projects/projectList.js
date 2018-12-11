@@ -14,7 +14,7 @@ var ProjectList = React.createClass({
     var createProjectRow = function(project) {
     return (
       <tr key={project.id}>
-      <td><a href={"/#projects/" + project.id}>{project.id}</a></td>
+      <td><Link to="manageProject" params={{id: project.id}}>{project.id}</Link></td>
       <td>{project.name1}, {project.name2}</td>
       </tr>
        );

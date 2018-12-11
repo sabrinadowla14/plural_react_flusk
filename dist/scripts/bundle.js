@@ -37058,6 +37058,382 @@ module.exports = warning;
 module.exports = require('./lib/React');
 
 },{"./lib/React":70}],198:[function(require,module,exports){
+/*
+ * Toastr
+ * Copyright 2012-2014 
+ * Authors: John Papa, Hans Fjällemark, and Tim Ferrell.
+ * All Rights Reserved.
+ * Use, reproduction, distribution, and modification of this code is subject to the terms and
+ * conditions of the MIT license, available at http://www.opensource.org/licenses/mit-license.php
+ *
+ * ARIA Support: Greta Krafsig
+ *
+ * Project: https://github.com/CodeSeven/toastr
+ */
+; (function (define) {
+    define(['jquery'], function ($) {
+        return (function () {
+            var $container;
+            var listener;
+            var toastId = 0;
+            var toastType = {
+                error: 'error',
+                info: 'info',
+                success: 'success',
+                warning: 'warning'
+            };
+
+            var toastr = {
+                clear: clear,
+                remove: remove,
+                error: error,
+                getContainer: getContainer,
+                info: info,
+                options: {},
+                subscribe: subscribe,
+                success: success,
+                version: '2.1.0',
+                warning: warning
+            };
+
+            var previousToast;
+
+            return toastr;
+
+            //#region Accessible Methods
+            function error(message, title, optionsOverride) {
+                return notify({
+                    type: toastType.error,
+                    iconClass: getOptions().iconClasses.error,
+                    message: message,
+                    optionsOverride: optionsOverride,
+                    title: title
+                });
+            }
+
+            function getContainer(options, create) {
+                if (!options) { options = getOptions(); }
+                $container = $('#' + options.containerId);
+                if ($container.length) {
+                    return $container;
+                }
+                if (create) {
+                    $container = createContainer(options);
+                }
+                return $container;
+            }
+
+            function info(message, title, optionsOverride) {
+                return notify({
+                    type: toastType.info,
+                    iconClass: getOptions().iconClasses.info,
+                    message: message,
+                    optionsOverride: optionsOverride,
+                    title: title
+                });
+            }
+
+            function subscribe(callback) {
+                listener = callback;
+            }
+
+            function success(message, title, optionsOverride) {
+                return notify({
+                    type: toastType.success,
+                    iconClass: getOptions().iconClasses.success,
+                    message: message,
+                    optionsOverride: optionsOverride,
+                    title: title
+                });
+            }
+
+            function warning(message, title, optionsOverride) {
+                return notify({
+                    type: toastType.warning,
+                    iconClass: getOptions().iconClasses.warning,
+                    message: message,
+                    optionsOverride: optionsOverride,
+                    title: title
+                });
+            }
+
+            function clear($toastElement) {
+                var options = getOptions();
+                if (!$container) { getContainer(options); }
+                if (!clearToast($toastElement, options)) {
+                    clearContainer(options);
+                }
+            }
+
+            function remove($toastElement) {
+                var options = getOptions();
+                if (!$container) { getContainer(options); }
+                if ($toastElement && $(':focus', $toastElement).length === 0) {
+                    removeToast($toastElement);
+                    return;
+                }
+                if ($container.children().length) {
+                    $container.remove();
+                }
+            }
+            //#endregion
+
+            //#region Internal Methods
+
+            function clearContainer (options) {
+                var toastsToClear = $container.children();
+                for (var i = toastsToClear.length - 1; i >= 0; i--) {
+                    clearToast($(toastsToClear[i]), options);
+                }
+            }
+
+            function clearToast ($toastElement, options) {
+                if ($toastElement && $(':focus', $toastElement).length === 0) {
+                    $toastElement[options.hideMethod]({
+                        duration: options.hideDuration,
+                        easing: options.hideEasing,
+                        complete: function () { removeToast($toastElement); }
+                    });
+                    return true;
+                }
+                return false;
+            }
+
+            function createContainer(options) {
+                $container = $('<div/>')
+                    .attr('id', options.containerId)
+                    .addClass(options.positionClass)
+                    .attr('aria-live', 'polite')
+                    .attr('role', 'alert');
+
+                $container.appendTo($(options.target));
+                return $container;
+            }
+
+            function getDefaults() {
+                return {
+                    tapToDismiss: true,
+                    toastClass: 'toast',
+                    containerId: 'toast-container',
+                    debug: false,
+
+                    showMethod: 'fadeIn', //fadeIn, slideDown, and show are built into jQuery
+                    showDuration: 300,
+                    showEasing: 'swing', //swing and linear are built into jQuery
+                    onShown: undefined,
+                    hideMethod: 'fadeOut',
+                    hideDuration: 1000,
+                    hideEasing: 'swing',
+                    onHidden: undefined,
+
+                    extendedTimeOut: 1000,
+                    iconClasses: {
+                        error: 'toast-error',
+                        info: 'toast-info',
+                        success: 'toast-success',
+                        warning: 'toast-warning'
+                    },
+                    iconClass: 'toast-info',
+                    positionClass: 'toast-top-right',
+                    timeOut: 5000, // Set timeOut and extendedTimeOut to 0 to make it sticky
+                    titleClass: 'toast-title',
+                    messageClass: 'toast-message',
+                    target: 'body',
+                    closeHtml: '<button>&times;</button>',
+                    newestOnTop: true,
+                    preventDuplicates: false,
+                    progressBar: false
+                };
+            }
+
+            function publish(args) {
+                if (!listener) { return; }
+                listener(args);
+            }
+
+            function notify(map) {
+                var options = getOptions(),
+                    iconClass = map.iconClass || options.iconClass;
+
+                if (options.preventDuplicates) {
+                    if (map.message === previousToast) {
+                        return;
+                    } else {
+                        previousToast = map.message;
+                    }
+                }
+
+                if (typeof (map.optionsOverride) !== 'undefined') {
+                    options = $.extend(options, map.optionsOverride);
+                    iconClass = map.optionsOverride.iconClass || iconClass;
+                }
+
+                toastId++;
+
+                $container = getContainer(options, true);
+                var intervalId = null,
+                    $toastElement = $('<div/>'),
+                    $titleElement = $('<div/>'),
+                    $messageElement = $('<div/>'),
+                    $progressElement = $('<div/>'),
+                    $closeElement = $(options.closeHtml),
+                    progressBar = {
+                        intervalId: null,
+                        hideEta: null,
+                        maxHideTime: null
+                    },
+                    response = {
+                        toastId: toastId,
+                        state: 'visible',
+                        startTime: new Date(),
+                        options: options,
+                        map: map
+                    };
+
+                if (map.iconClass) {
+                    $toastElement.addClass(options.toastClass).addClass(iconClass);
+                }
+
+                if (map.title) {
+                    $titleElement.append(map.title).addClass(options.titleClass);
+                    $toastElement.append($titleElement);
+                }
+
+                if (map.message) {
+                    $messageElement.append(map.message).addClass(options.messageClass);
+                    $toastElement.append($messageElement);
+                }
+
+                if (options.closeButton) {
+                    $closeElement.addClass('toast-close-button').attr('role', 'button');
+                    $toastElement.prepend($closeElement);
+                }
+
+                if (options.progressBar) {
+                    $progressElement.addClass('toast-progress');
+                    $toastElement.prepend($progressElement);
+                }
+
+                $toastElement.hide();
+                if (options.newestOnTop) {
+                    $container.prepend($toastElement);
+                } else {
+                    $container.append($toastElement);
+                }
+                $toastElement[options.showMethod](
+                    {duration: options.showDuration, easing: options.showEasing, complete: options.onShown}
+                );
+
+                if (options.timeOut > 0) {
+                    intervalId = setTimeout(hideToast, options.timeOut);
+                    progressBar.maxHideTime = parseFloat(options.timeOut);
+                    progressBar.hideEta = new Date().getTime() + progressBar.maxHideTime;
+                    if (options.progressBar) {
+                        progressBar.intervalId = setInterval(updateProgress, 10);
+                    }
+                }
+
+                $toastElement.hover(stickAround, delayedHideToast);
+                if (!options.onclick && options.tapToDismiss) {
+                    $toastElement.click(hideToast);
+                }
+
+                if (options.closeButton && $closeElement) {
+                    $closeElement.click(function (event) {
+                        if (event.stopPropagation) {
+                            event.stopPropagation();
+                        } else if (event.cancelBubble !== undefined && event.cancelBubble !== true) {
+                            event.cancelBubble = true;
+                        }
+                        hideToast(true);
+                    });
+                }
+
+                if (options.onclick) {
+                    $toastElement.click(function () {
+                        options.onclick();
+                        hideToast();
+                    });
+                }
+
+                publish(response);
+
+                if (options.debug && console) {
+                    console.log(response);
+                }
+
+                return $toastElement;
+
+                function hideToast(override) {
+                    if ($(':focus', $toastElement).length && !override) {
+                        return;
+                    }
+                    clearTimeout(progressBar.intervalId);
+                    return $toastElement[options.hideMethod]({
+                        duration: options.hideDuration,
+                        easing: options.hideEasing,
+                        complete: function () {
+                            removeToast($toastElement);
+                            if (options.onHidden && response.state !== 'hidden') {
+                                options.onHidden();
+                            }
+                            response.state = 'hidden';
+                            response.endTime = new Date();
+                            publish(response);
+                        }
+                    });
+                }
+
+                function delayedHideToast() {
+                    if (options.timeOut > 0 || options.extendedTimeOut > 0) {
+                        intervalId = setTimeout(hideToast, options.extendedTimeOut);
+                        progressBar.maxHideTime = parseFloat(options.extendedTimeOut);
+                        progressBar.hideEta = new Date().getTime() + progressBar.maxHideTime;
+                    }
+                }
+
+                function stickAround() {
+                    clearTimeout(intervalId);
+                    progressBar.hideEta = 0;
+                    $toastElement.stop(true, true)[options.showMethod](
+                        {duration: options.showDuration, easing: options.showEasing}
+                    );
+                }
+
+                function updateProgress() {
+                    var percentage = ((progressBar.hideEta - (new Date().getTime())) / progressBar.maxHideTime) * 100;
+                    $progressElement.width(percentage + '%');
+                }
+            }
+
+            function getOptions() {
+                return $.extend({}, getDefaults(), toastr.options);
+            }
+
+            function removeToast($toastElement) {
+                if (!$container) { $container = getContainer(); }
+                if ($toastElement.is(':visible')) {
+                    return;
+                }
+                $toastElement.remove();
+                $toastElement = null;
+                if ($container.children().length === 0) {
+                    $container.remove();
+                }
+            }
+            //#endregion
+
+        })();
+    });
+}(typeof define === 'function' && define.amd ? define : function (deps, factory) {
+    if (typeof module !== 'undefined' && module.exports) { //Node
+        module.exports = factory(require('jquery'));
+    } else {
+        window['toastr'] = factory(window['jQuery']);
+    }
+}));
+
+},{"jquery":1}],199:[function(require,module,exports){
 "use strict";
 
 //This file is mocking a web API by hitting hard coded data.
@@ -37065,30 +37441,30 @@ var projects = require('./projectData').projects;
 var _ = require('lodash');
 
 //This would be performed on the server in a real app. Just stubbing in.
-var _generateId = function(project) {
-	return project.name1.toLowerCase() + '-' + project.name2.toLowerCase();
+var _generateId = function (project) {
+	return project.id.toLowerCase();
 };
 
-var _clone = function(item) {
+var _clone = function (item) {
 	return JSON.parse(JSON.stringify(item)); //return cloned copy so that the item is passed by value instead of by reference
 };
 
 var ProjectApi = {
-	getAllProjects: function() {
-		return _clone(projects); 
+	getAllProjects: function () {
+		return _clone(projects);
 	},
 
-	getProjectById: function(id) {
-		var project = _.find(projects, {id: id});
+	getProjectById: function (id) {
+		var project = _.find(projects, { id: id });
 		return _clone(project);
 	},
-	
-	saveProject: function(project) {
+
+	saveProject: function (project) {
 		//pretend an ajax call to web api is made here
 		console.log('Pretend this just saved the project to the DB via AJAX call...');
-		
+
 		if (project.id) {
-			var existingProjectIndex = _.indexOf(projects, _.find(projects, {id: project.id})); 
+			var existingProjectIndex = _.indexOf(projects, _.find(projects, { id: project.id }));
 			projects.splice(existingProjectIndex, 1, project);
 		} else {
 			//Just simulating creation here.
@@ -37101,15 +37477,15 @@ var ProjectApi = {
 		return project;
 	},
 
-	deleteProject: function(id) {
+	deleteProject: function (id) {
 		console.log('Pretend this just deleted the project from the DB via an AJAX call...');
-		_.remove(projects, { id: id});
+		_.remove(projects, { id: id });
 	}
 };
 
 module.exports = ProjectApi;
 
-},{"./projectData":199,"lodash":2}],199:[function(require,module,exports){
+},{"./projectData":200,"lodash":2}],200:[function(require,module,exports){
 module.exports = {
 	projects: 
 	[
@@ -37131,7 +37507,7 @@ module.exports = {
 	]
 };
 
-},{}],200:[function(require,module,exports){
+},{}],201:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -37151,12 +37527,26 @@ var page404 = React.createClass({displayName: "page404",
 
 module.exports = page404;
 
-},{"react":197,"react-router":28}],201:[function(require,module,exports){
+},{"react":197,"react-router":28}],202:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
 
 var About = React.createClass({displayName: "About",
+	statics: {
+		willTransitionTo: function(transition, params, query, callback) {
+			if (!confirm('Do you want to continue?')) {
+				transition.about();
+			} else {
+				callback();
+			}
+		},
+		willTransitionFrom: function(transition, component) {
+			if (!confirm('Are you sure you want to leave?')) {
+				transition.about();
+			}
+		}
+	},
 	render: function () {
 		return (
 			React.createElement("div", null, 
@@ -37177,7 +37567,7 @@ var About = React.createClass({displayName: "About",
 
 module.exports = About;
 
-},{"react":197}],202:[function(require,module,exports){
+},{"react":197}],203:[function(require,module,exports){
 /*eslint-disable strict */ //Disabling check because we can't run strict mode. Need global vars.
 var React = require('react');
 var Header = require('./share/header');
@@ -37200,10 +37590,14 @@ var App = React.createClass({displayName: "App",
     );
   }
 });
-},{"./share/header":206,"jquery":1,"react":197,"react-router":28}],203:[function(require,module,exports){
+
+module.exports = App;
+},{"./share/header":209,"jquery":1,"react":197,"react-router":28}],204:[function(require,module,exports){
 "use strict";
 //import react in this file
 var React = require('react');
+var Router = require('react-router');
+var Link = Router.Link;
 //Create Home component
 var Home = React.createClass({displayName: "Home",
   render: function() {
@@ -37211,7 +37605,7 @@ var Home = React.createClass({displayName: "Home",
 			React.createElement("div", {className: "jumbotron"}, 
 				React.createElement("h1", null, "Resume Website"), 
 				React.createElement("p", null, "React, React Router, and Flux are used to create this responsive website."), 
-				React.createElement(Link, {to: "about", className: "btn btn-primary btn-lg"}, "Learn more")
+				React.createElement(Link, {to: "about", className: "btn btn-primary btn-lg"}, "Want to know more")
 			)
 		);
 	}
@@ -37220,10 +37614,103 @@ var Home = React.createClass({displayName: "Home",
 });
 module.exports = Home;
 
-},{"react":197}],204:[function(require,module,exports){
+},{"react":197,"react-router":28}],205:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
+var Router = require('react-router');
+var ProjectForm = require('./projectForm');
+var ProjectApi = require('../../api/projectApi');
+var toastr = require('toastr');
+
+var ManageProject = React.createClass({displayName: "ManageProject",
+  mixins: [
+    Router.Navigation
+  ],
+
+  statics: {
+		willTransitionFrom: function(transition, component) {
+			if (component.state.dirty && !confirm('Leave without saving?')) {
+				transition.abort();
+			}
+		}
+	},
+
+  getInitialState: function () {
+    return {
+      project: { id: '', name1: '', name2: '' },
+      errors: {},
+      dirty: false
+    };
+  },
+
+  componentWillMount: function() {
+		var projectId = this.props.params.id; //from the path '/project:id'
+		if (projectId) {
+			this.setState({project: ProjectApi.getProjectById(projectId) });
+		}
+	},
+  setProjectState: function (event) {
+    this.setState({dirty: true});
+    var field = event.target.name;
+    var value = event.target.value;
+    this.state.project[field] = value;
+    return this.setState({ project: this.state.project });
+  },
+  projectFormIsValid: function() {
+		var formIsValid = true;
+		this.state.errors = {}; //clear any previous errors.
+
+		if (this.state.project.name1.length < 3) {
+			this.state.errors.name1 = 'Project tools must be at least 3 characters.';
+			formIsValid = false;
+		}
+
+		if (this.state.project.name2.length < 3) {
+			this.state.errors.name2 = 'Project language must be at least 3 characters.';
+			formIsValid = false;
+		}
+
+		this.setState({errors: this.state.errors});
+		return formIsValid;
+	},
+  
+
+
+  //passing event from child component to here
+  saveProject: function (event) {
+    //we don't want the default browser event to happen here
+    event.preventDefault();
+    if (!this.projectFormIsValid()) {
+			return;
+		}
+    ProjectApi.saveProject(this.state.project);
+    this.setState({dirty: false});
+    toastr.success('Project saved.');
+    this.transitionTo('projects');
+  },
+
+  render: function () {
+    return (
+      //Add a reference to projectForm
+      React.createElement(ProjectForm, {project: this.state.project, 
+        onChange: this.setProjectState, 
+        onSave: this.saveProject, 
+        errors: this.state.errors}
+         
+         )
+    );
+  }
+
+});
+module.exports = ManageProject;
+
+},{"../../api/projectApi":199,"./projectForm":207,"react":197,"react-router":28,"toastr":198}],206:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+var Router = require('react-router');
+var Link = Router.Link;
 var ProjectApi = require('../../api/projectApi');
 var ProjectList = require('./projectList');
 
@@ -37244,7 +37731,8 @@ var Projects = React.createClass({displayName: "Projects",
     
 		return (
 			React.createElement("div", null, 
-        React.createElement("h1", null, "Projects"), 
+				React.createElement("h1", null, "Projects"), 
+				React.createElement(Link, {to: "addProject", className: "btn btn-default"}, "Add Project"), 
         React.createElement(ProjectList, {projects: this.state.projects})
        )
 		);
@@ -37253,7 +37741,62 @@ var Projects = React.createClass({displayName: "Projects",
 
 module.exports = Projects;
 
-},{"../../api/projectApi":198,"./projectList":205,"react":197}],205:[function(require,module,exports){
+},{"../../api/projectApi":199,"./projectList":208,"react":197,"react-router":28}],207:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+var Input = require('../share/textInput');
+
+var ProjectForm = React.createClass({displayName: "ProjectForm",
+  propTypes: {
+		project:	React.PropTypes.object.isRequired,
+		onSave:	React.PropTypes.func.isRequired,
+		onChange: React.PropTypes.func.isRequired,
+		errors: React.PropTypes.object
+	},
+  render: function () {
+    return (
+      React.createElement("form", null, 
+        React.createElement("h1", null, "Manage Project"), 
+        React.createElement(Input, {
+          name: "id", 
+          label: "Project Name", 
+          value: this.props.project.id, 
+          onChange: this.props.onChange, 
+          error: this.props.errors.id}
+
+          
+           ), 
+        React.createElement(Input, {
+          name: "name1", 
+          label: "Project tools", 
+          value: this.props.project.name1, 
+          onChange: this.props.onChange, 
+          error: this.props.errors.name1}
+          
+           ), 
+
+        React.createElement(Input, {
+          name: "name2", 
+          label: "Project Language", 
+          value: this.props.project.name2, 
+          onChange: this.props.onChange, 
+          error: this.props.errors.name2}
+          
+           ), 
+
+
+        React.createElement("input", {type: "submit", value: "Save", className: "btn btn-default", onClick: this.props.onSave})
+      )
+
+
+    );
+  }
+
+});
+module.exports = ProjectForm;
+
+},{"../share/textInput":210,"react":197}],208:[function(require,module,exports){
 "use strict";
 //don't need projectApi, since data is coming from the
 //parents
@@ -37270,7 +37813,7 @@ var ProjectList = React.createClass({displayName: "ProjectList",
     var createProjectRow = function(project) {
     return (
       React.createElement("tr", {key: project.id}, 
-      React.createElement("td", null, React.createElement("a", {href: "/#projects/" + project.id}, project.id)), 
+      React.createElement("td", null, React.createElement(Link, {to: "manageProject", params: {id: project.id}}, project.id)), 
       React.createElement("td", null, project.name1, ", ", project.name2)
       )
        );
@@ -37295,7 +37838,7 @@ var ProjectList = React.createClass({displayName: "ProjectList",
 
 module.exports = ProjectList;
 
-},{"react":197,"react-router":28}],206:[function(require,module,exports){
+},{"react":197,"react-router":28}],209:[function(require,module,exports){
 "use strict";
 
 var React = require('react');
@@ -37323,7 +37866,58 @@ var Header = React.createClass({displayName: "Header",
 });
 
 module.exports = Header;
-},{"react":197,"react-router":28}],207:[function(require,module,exports){
+},{"react":197,"react-router":28}],210:[function(require,module,exports){
+"use strict";
+
+var React = require('react');
+
+
+var Input = React.createClass({displayName: "Input",
+  propTypes: {
+    
+    name: React.PropTypes.string.isRequired,
+    label: React.PropTypes.string.isRequired,
+    onChange: React.PropTypes.func.isRequired,
+    placeholder: React.PropTypes.string,
+    value: React.PropTypes.string,
+    error: React.PropTypes.string
+  },
+  render: function () {
+    var wrapperClass = 'form-group';
+    if (this.props.error && this.props.error.length > 0) {
+      wrapperClass += " " + 'has-error';
+    }
+    return (
+      React.createElement("div", {className: wrapperClass}, 
+        React.createElement("label", {htmlFor: this.props.name}, this.props.label), 
+        React.createElement("div", {className: "field"}, 
+          
+
+          React.createElement("input", {type: "text", 
+            name: this.props.name, 
+            className: "form-control", 
+            placeholder: this.props.placeholder, 
+            ref: this.props.name, 
+            value: this.props.value, 
+            onChange: this.props.onChange}), 
+
+            React.createElement("div", {className: "input"}, this.props.error)
+        )
+      )
+
+
+
+
+
+
+    );
+  }
+
+});
+
+module.exports = Input;
+
+},{"react":197}],211:[function(require,module,exports){
 
 "use strict";
 
@@ -37334,7 +37928,7 @@ var routes = require('./routes');
 Router.run(routes, function(Handler) {
 	React.render(React.createElement(Handler, null), document.getElementById('app'));
 });
-},{"./routes":208,"react":197,"react-router":28}],208:[function(require,module,exports){
+},{"./routes":212,"react":197,"react-router":28}],212:[function(require,module,exports){
 "use strict";
 
 
@@ -37351,6 +37945,8 @@ var routes = (
   React.createElement(Route, {name: "app", path: "/", handler: require('./components/app')}, 
     React.createElement(DefaultRoute, {handler: require('./components/home')}), 
     React.createElement(Route, {name: "projects", handler: require('./components/projects/project')}), 
+    React.createElement(Route, {name: "addProject", path: "project", handler: require('./components/projects/manageProject')}), 
+    React.createElement(Route, {name: "manageProject", path: "project/:id", handler: require('./components/projects/manageProject')}), 
     React.createElement(Route, {name: "about", handler: require('./components/about/about')}), 
     React.createElement(NotFoundRoute, {handler: require('./components/404')}), 
     React.createElement(Redirect, {from: "about-us", to: "about"}), 
@@ -37364,4 +37960,4 @@ var routes = (
 
 module.exports = routes;
 
-},{"./components/404":200,"./components/about/about":201,"./components/app":202,"./components/home":203,"./components/projects/project":204,"react":197,"react-router":28}]},{},[207]);
+},{"./components/404":201,"./components/about/about":202,"./components/app":203,"./components/home":204,"./components/projects/manageProject":205,"./components/projects/project":206,"react":197,"react-router":28}]},{},[211]);

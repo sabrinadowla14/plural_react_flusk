@@ -14,6 +14,8 @@ var routes = (
   <Route name="app" path="/" handler={require('./components/app')}>
     <DefaultRoute handler={require('./components/home')} />
     <Route name="projects" handler={require('./components/projects/project')} />
+    <Route name="addProject" path="project" handler={require('./components/projects/manageProject')} />
+    <Route name="manageProject" path="project/:id" handler={require('./components/projects/manageProject')} />
     <Route name="about" handler={require('./components/about/about')} />
     <NotFoundRoute handler={require('./components/404')} />
     <Redirect from="about-us" to="about" />
